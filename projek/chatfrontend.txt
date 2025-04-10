@@ -1,0 +1,45 @@
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import io from 'socket.io-client';
+
+function App() {
+  const [text, setText] = useState('');
+  const [messages, setMessages] = useState([]);
+
+  useEffect(() => {
+    getMessages();
+    const socket = io('http://localhost:3000');
+    socket.on('message', (message) => {
+      setMessages((messages) => [message, ...messages]);
+    });
+  }, []);
+
+  const getMessages = async () => {
+    const res = await axios.get('http://localhost:3000/messages');
+    setMessages(res.data);
+  };
+
+  const sendMessage = async () => {
+    await axios.post('http://localhost:3000/messages', { text });
+    setText('');
+  };
+
+  return (
+    <div>
+      <input
+        type="text"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="Enter your message"
+      />
+      <button onClick={sendMessage}>Send</button>
+      <ul>
+        {messages.map((message) => (
+          <li key={message._id}>{message.text}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export default App;

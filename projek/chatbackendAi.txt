@@ -1,0 +1,38 @@
+const express = require('express');
+const bodyParser = require('body-parser');
+const mongoose = require('mongoose');
+const socketio = require('socket.io');
+
+const app = express();
+const server = require('http').createServer(app);
+const io = socketio(server);
+
+app.use(bodyParser.json());
+
+mongoose.connect(
+  'mongodb+srv://username:password@cluster0.mongodb.net/database',
+  { useNewUrlParser: true }
+);
+
+const Message = mongoose.model('Message', {
+  text: String,
+  createdAt: Date
+});
+
+app.get('/messages', async (req, res) => {
+  const messages = await Message.find().sort({ createdAt: -1 });
+  res.send(messages);
+});
+
+io.on('connection', (socket) => {
+  socket.on('message', async (data) => {
+    const message = new Message({
+      text: data.text,
+      createdAt: new Date()
+    });
+    await message.save();
+    io.emit('message', message);
+  });
+});
+
+server.listen(3000, () => console.log('Server listening on port 3000'));

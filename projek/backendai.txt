@@ -1,0 +1,397 @@
+const express = require('express');
+const bodyParser = require('body-parser');
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+
+const app = express();
+
+app.use(bodyParser.json());
+
+mongoose.connect('mongodb://localhost/jwt-auth', { useNewUrlParser: true });
+
+const User = mongoose.model('User', {
+  username: String,
+  password: String
+});
+
+const Item = mongoose.model('Item', {
+  text: String,
+  userId: mongoose.Schema.Types.ObjectId
+});
+
+app.post('/register', async (req, res) => {
+  const { username, password } = req.body;
+  const hashedPassword = await bcrypt.hash(password, 10);
+  const user = new User({ username, password: hashedPassword });
+  await user.save();
+  res.send({ message: 'User registered' });
+});
+
+app.post('/login', async (req, res) => {
+  const { username, password } = req.body;
+  const user = await User.findOne({ username });
+  if (!user) {
+    return res.send({ error: 'Invalid username or password' });
+  }
+  const validPassword = await bcrypt.compare(password, user.password);
+  if (!validPassword) {
+    return res.send({ error: 'Invalid username or password' });
+  }
+  const token = jwt.sign({ id: user._id }, 'secret');
+  res.send({ token });
+});
+
+app.get('/me', async (req, res) => {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) {
+    return res.send({ error: 'No token provided' });
+  }
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, 'secret');
+    const user = await User.findById(decoded.id);
+    res.send(user);
+  } catch (err) {
+    res.send({ error: 'Invalid token' });
+  }
+});
+
+app.get('/items', async (req, res) => {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) {
+    return res.send({ error: 'No token provided' });
+  }
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, 'secret');
+    const items = await Item.find({ userId: decoded.id });
+    res.send(items);
+  } catch (err) {
+    res.send({ error: 'Invalid token' });
+  }
+});
+
+app.post('/items', async (req, res) => {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) {
+    return res.send({ error: 'No token provided' });
+  }
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, 'secret');
+    const item = new Item({
+      text: req.body.text,
+      userId: decoded.id
+    });
+    await item.save();
+    res.send(item);
+  } catch (err) {
+    res.send({ error: 'Invalid token' });
+  }
+});
+
+app.put('/items/:id', async (req, res) => {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) {
+    return res.send({ error: 'No token provided' });
+  }
+  const token = authHeader.split(' ')[1];
+  try {
+    jwt.verify(token, 'secret');
+    const item = await Item.findByIdAndUpdate(req.params.id, req.body);
+    res.send(item);
+  } catch (err) {
+    res.send({ error: 'Invalid token' });
+  }
+});
+
+const express = require('express');
+const bodyParser = require('body-parser');
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+
+const app = express();
+
+app.use(bodyParser.json());
+
+mongoose.connect('mongodb://localhost/jwt-auth', { useNewUrlParser: true });
+
+const User = mongoose.model('User', {
+  username: String,
+  password: String
+});
+
+const Item = mongoose.model('Item', {
+  text: String,
+  userId: mongoose.Schema.Types.ObjectId
+});
+
+app.post('/register', async (req, res) => {
+  const { username, password } = req.body;
+  const hashedPassword = await bcrypt.hash(password, 10);
+  const user = new User({ username, password: hashedPassword });
+  await user.save();
+  res.send({ message: 'User registered' });
+});
+
+app.post('/login', async (req, res) => {
+  const { username, password } = req.body;
+  const user = await User.findOne({ username });
+  if (!user) {
+    return res.send({ error: 'Invalid username or password' });
+  }
+  const validPassword = await bcrypt.compare(password, user.password);
+  if (!validPassword) {
+    return res.send({ error: 'Invalid username or password' });
+  }
+  const token = jwt.sign({ id: user._id }, 'secret');
+  res.send({ token });
+});
+
+app.get('/me', async (req, res) => {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) {
+    return res.send({ error: 'No token provided' });
+  }
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, 'secret');
+    const user = await User.findById(decoded.id);
+    res.send(user);
+  } catch (err) {
+    res.send({ error: 'Invalid token' });
+  }
+});
+
+app.get('/items', async (req, res) => {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) {
+    return res.send({ error: 'No token provided' });
+  }
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, 'secret');
+    const items = await Item.find({ userId: decoded.id });
+    res.send(items);
+  } catch (err) {
+    res.send({ error: 'Invalid token' });
+  }
+});
+
+app.post('/items', async (req, res) => {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) {
+    return res.send({ error: 'No token provided' });
+  }
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, 'secret');
+    const item = new Item({
+      text: req.body.text,
+      userId: decoded.id
+    });
+    await item.save();
+    res.send(item);
+  } catch (err) {
+    res.send({ error: 'Invalid token' });
+  }
+});
+
+app.put('/items/:id', async (req, res) => {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) {
+    return res.send({ error: 'No token provided' });
+  }
+  const token = authHeader.split(' ')[1];
+  try {
+    jwt.verify(token, 'secret');
+    const item = await Item.findByIdAndUpdate(req.params.id, req.body);
+    res.send(item);
+  } catch (err) {
+    res.send({ error: 'Invalid token' });
+  }
+});
+
+const express = require('express');
+const bodyParser = require('body-parser');
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+
+const app = express();
+
+app.use(bodyParser.json());
+
+mongoose.connect('mongodb://localhost/jwt-auth', { useNewUrlParser: true });
+
+const User = mongoose.model('User', {
+  username: String,
+  password: String
+});
+
+const Item = mongoose.model('Item', {
+  text: String,
+  userId: mongoose.Schema.Types.ObjectId
+});
+
+app.post('/register', async (req, res) => {
+  const { username, password } = req.body;
+  const hashedPassword = await bcrypt.hash(password, 10);
+  const user = new User({ username, password: hashedPassword });
+  await user.save();
+  res.send({ message: 'User registered' });
+});
+
+app.post('/login', async (req, res) => {
+  const { username, password } = req.body;
+  const user = await User.findOne({ username });
+  if (!user) {
+    return res.send({ error: 'Invalid username or password' });
+  }
+  const validPassword = await bcrypt.compare(password, user.password);
+  if (!validPassword) {
+    return res.send({ error: 'Invalid username or password' });
+  }
+  const token = jwt.sign({ id: user._id }, 'secret');
+  res.send({ token });
+});
+
+app.get('/me', async (req, res) => {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) {
+    return res.send({ error: 'No token provided' });
+  }
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, 'secret');
+    const user = await User.findById(decoded.id);
+    res.send(user);
+  } catch (err) {
+    res.send({ error: 'Invalid token' });
+  }
+});
+
+app.get('/items', async (req, res) => {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) {
+    return res.send({ error: 'No token provided' });
+  }
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, 'secret');
+    const items = await Item.find({ userId: decoded.id });
+    res.send(items);
+  } catch (err) {
+    res.send({ error: 'Invalid token' });
+  }
+});
+
+app.post('/items', async (req, res) => {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) {
+    return res.send({ error: 'No token provided' });
+  }
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, 'secret');
+    const item = new Item({
+      text: req.body.text,
+      userId: decoded.id
+    });
+    await item.save();
+    res.send(item);
+  } catch (err) {
+    res.send({ error: 'Invalid token' });
+  }
+});
+
+app.put('/items/:id', async (req, res) => {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) {
+    return res.send({ error: 'No token provided' });
+  }
+  const token = authHeader.split(' ')[1];
+  try {
+    jwt.verify(token, 'secret');
+    const item = await Item.findByIdAndUpdate(req.params.id, req.body);
+    res.send(item);
+  } catch (err) {
+    res.send({ error: 'Invalid token' });
+  }
+});
+
+app.delete('/items/:id', async (req, res) => {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) {
+    return res.send({ error: 'No token provided' });
+  }
+  const token = authHeader.split(' ')[1];
+  try {
+    jwt.verify(token, 'secret');
+    const item = await Item.findByIdAndDelete(req.params.id);
+    res.send(item);
+  } catch (err) {
+    res.send({ error: 'Invalid token' });
+  }
+});
+
+app.listen(3000, () => console.log('Server listening on port 3000'));
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+const apiURL = 'https://your-app.herokuapp.com';
+
+// ...
+
+const register = async () => {
+  try {
+    await axios.post(`${apiURL}/register`, { username, password });
+    alert('User registered');
+  } catch (err) {
+    alert(err.response.data.error);
+  }
+};
+
+// ...
+
+const login = async () => {
+  try {
+    const res = await axios.post(`${apiURL}/login`, { username, password });
+    localStorage.setItem('token', res.data.token);
+    getMe();
+    getItems();
+  } catch (err) {
+    alert(err.response.data.error);
+  }
+};
+
+// ...
+
+
