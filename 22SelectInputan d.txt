@@ -1,0 +1,250 @@
+1. MongoDB Schema (kategoriSchema.js)
+Contoh : 
+const mongoose = require("mongoose");
+
+const kategoriSchema = new mongoose.Schema({
+    nama: {
+        type: String,
+        required: true,
+        unique: true,
+        trim: true
+    },
+    createdBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        required: true
+    }
+}, { timestamps: true });
+
+module.exports = mongoose.model("Kategori", kategoriSchema);
+
+
+
+
+ 🌐 2. Express Route (kategoriRoutes.js)
+
+Contoh : 
+const express = require("express");
+const router = express.Router();
+const Kategori = require("../Schema/kategoriSchema");
+const verifyToken = require("./Authorization/jwt");
+
+// GET semua kategori (bisa dibatasi per user)
+router.get("/", verifyToken, async (req, res) => {
+    try {
+        const kategori = await Kategori.find({ createdBy: req.user._id });
+        res.status(200).json(kategori);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST kategori baru
+router.post("/", verifyToken, async (req, res) => {
+    try {
+        const { nama } = req.body;
+
+        // Cek apakah sudah ada
+        const existing = await Kategori.findOne({ nama, createdBy: req.user._id });
+        if (existing) return res.status(200).json(existing);
+
+        const newKategori = new Kategori({
+            nama,
+            createdBy: req.user._id
+        });
+
+        await newKategori.save();
+        res.status(201).json(newKategori);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+module.exports = router;
+
+
+> Jangan lupa hubungkan ke `app.js` atau `server.js`:
+Contoh : 
+const kategoriRoute = require("./Routes/kategoriRoutes");
+app.use("/kategori", kategoriRoute);
+
+
+
+
+ ⚛️ 3. Frontend React: KategoriSelect.jsx
+Install dulu:
+bash
+npm install react-select
+
+
+Contoh : x
+import React, { useEffect, useState } from "react";
+import CreatableSelect from "react-select/creatable";
+import axios from "axios";
+
+const KategoriSelect = ({ onKategoriSelected }) => {
+    const [kategoriList, setKategoriList] = useState([]);
+    const [selectedKategori, setSelectedKategori] = useState(null);
+
+    const fetchKategori = async () => {
+        try {
+            const token = localStorage.getItem("token-kedua");
+            const config = {
+                headers: {
+                    "nama-token": token
+                }
+            };
+
+            const res = await axios.get(`${process.env.REACT_APP_BASE_URL}/kategori`, config);
+            const options = res.data.map(kat => ({
+                label: kat.nama,
+                value: kat.nama
+            }));
+
+            setKategoriList(options);
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const handleChange = async (newValue) => {
+        setSelectedKategori(newValue);
+        onKategoriSelected(newValue); // kirim ke parent
+
+        const exists = kategoriList.find(k => k.value === newValue.value);
+        if (!exists) {
+            try {
+                const token = localStorage.getItem("token-kedua");
+                const config = {
+                    headers: {
+                        "nama-token": token
+                    }
+                };
+
+                await axios.post(`${process.env.REACT_APP_BASE_URL}/kategori`, {
+                    nama: newValue.value
+                }, config);
+
+                fetchKategori(); // Refresh list
+            } catch (err) {
+                console.error(err);
+            }
+        }
+    };
+
+    useEffect(() => {
+        fetchKategori();
+    }, []);
+
+    return (
+        <div style={{ width: 300 }}>
+            <CreatableSelect
+                options={kategoriList}
+                value={selectedKategori}
+                onChange={handleChange}
+                isClearable
+                placeholder="Pilih atau tambah kategori"
+            />
+        </div>
+    );
+};
+
+export default KategoriSelect;
+
+
+
+
+ 🧪 4. Contoh Penggunaan di Form Todo
+
+Contoh : x
+import React, { useState } from "react";
+import KategoriSelect from "./KategoriSelect";
+import axios from "axios";
+
+const FormTodo = () => {
+    const [isi, setIsi] = useState("");
+    const [kategori, setKategori] = useState(null);
+
+    const handleSubmit = async () => {
+        const token = localStorage.getItem("token-kedua");
+        const config = {
+            headers: {
+                "nama-token": token
+            }
+        };
+
+        const payload = {
+            isi,
+            kategori: kategori?.value || "Umum" // fallback jika kosong
+        };
+
+        try {
+            await axios.post(`${process.env.REACT_APP_BASE_URL}/todo/todo`, payload, config);
+            setIsi("");
+            setKategori(null);
+            alert("Todo disimpan!");
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    return (
+        <div className="p-4">
+            <input
+                type="text"
+                value={isi}
+                onChange={(e) => setIsi(e.target.value)}
+                placeholder="Isi todo"
+                className="p-2 border"
+            />
+            <KategoriSelect onKategoriSelected={(kategori) => setKategori(kategori)} />
+            <button onClick={handleSubmit} className="bg-blue-500 text-white px-4 py-2 mt-2">Simpan</button>
+        </div>
+    );
+};
+
+export default FormTodo;
+
+
+
+
+ 🗂️ 5. Schema Todo dengan Kategori
+
+Tambahkan `kategori` ke schema todo:
+
+Contoh : 
+const mongoose = require("mongoose");
+
+const todoSchema = new mongoose.Schema({
+    isi: {
+        type: String,
+        required: true
+    },
+    kategori: {
+        type: String, // atau bisa ObjectId kalau relasi
+        default: "Umum"
+    },
+    checked: {
+        type: Boolean,
+        default: false
+    },
+    createdBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        required: true
+    }
+}, { timestamps: true });
+
+module.exports = mongoose.model("Todo", todoSchema);
+
+
+
+
+ ✅ Done!
+Sekarang user bisa:
+- Pilih kategori dari list
+- Tambahkan kategori baru
+- Kategori baru langsung tersimpan di database
+- Kategori bisa dipakai lagi di masa depan
+
+Kalau kamu ingin fitur multiselect atau tag-style, tinggal ubah sedikit logikanya ke array. Mau lanjut ke situ?

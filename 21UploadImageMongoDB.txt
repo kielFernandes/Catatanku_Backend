@@ -1,0 +1,655 @@
+Baik! Saya akan menyesuaikan backend sesuai permintaan dengan hanya memiliki rute dan schema, serta menyesuaikan frontend React untuk CRUD gambar.  
+
+
+
+ 📂 Struktur Folder
+
+mern-image-crud/
+│── backend/
+│   ├── models/
+│   │   ├── imageModel.js
+│   ├── routes/
+│   │   ├── imageRoutes.js
+│   ├── index.js
+│── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── ImageUpload.js
+│   ├── App.js
+│── .env
+
+
+
+
+# 1️⃣ Backend (Node.js, Express, MongoDB)  
+ 📌 a. Schema MongoDB (`models/imageModel.js`)  
+Schema untuk menyimpan informasi gambar.
+
+javascript
+const mongoose = require("mongoose");
+
+const imageSchema = new mongoose.Schema({
+  filename: { type: String, required: true },
+  url: { type: String, required: true },
+}, { timestamps: true });
+
+module.exports = mongoose.model("Image", imageSchema);
+
+
+
+
+ 📌 b. Rute (`routes/imageRoutes.js`)  
+Menangani upload, get, dan delete gambar.
+
+javascript
+const express = require("express");
+const multer = require("multer");
+const Image = require("../models/imageModel");
+const fs = require("fs");
+const path = require("path");
+
+const router = express.Router();
+
+// Konfigurasi penyimpanan gambar dengan multer
+const storage = multer.diskStorage({
+  destination: "uploads/",
+  filename: (req, file, cb) => cb(null, Date.now() + "-" + file.originalname),
+});
+const upload = multer({ storage });
+
+// GET - Ambil semua gambar
+router.get("/", async (req, res) => {
+  try {
+    const images = await Image.find();
+    res.json(images);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching images" });
+  }
+});
+
+// POST - Upload gambar
+router.post("/", upload.single("image"), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ message: "No file uploaded" });
+  }
+
+  try {
+    const newImage = await Image.create({
+      filename: req.file.filename,
+      url: `http://localhost:3001/uploads/${req.file.filename}`,
+    });
+
+    res.status(201).json(newImage);
+  } catch (error) {
+    res.status(500).json({ message: "Error saving image" });
+  }
+});
+
+// DELETE - Hapus gambar
+router.delete("/:id", async (req, res) => {
+  try {
+    const image = await Image.findById(req.params.id);
+    if (!image) return res.status(404).json({ message: "Image not found" });
+
+    // Hapus file dari folder uploads
+    fs.unlinkSync(path.join(__dirname, "../uploads/", image.filename));
+
+    // Hapus dari database
+    await Image.deleteOne({ _id: req.params.id });
+
+    res.json({ message: "Image deleted" });
+  } catch (error) {
+    res.status(500).json({ message: "Error deleting image" });
+  }
+});
+
+module.exports = router;
+
+
+
+
+ 📌 c. Index (`index.js`)  
+File utama untuk menjalankan server tanpa class.
+
+javascript
+require("dotenv").config();
+const express = require("express");
+const mongoose = require("mongoose");
+const cors = require("cors");
+const path = require("path");
+
+const mongoString = process.env.DATABASE_URL;
+const app = express();
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cors());
+
+const imageRoutes = require("./routes/imageRoutes");
+
+// Koneksi ke MongoDB
+mongoose.connect(mongoString, { useNewUrlParser: true, useUnifiedTopology: true });
+const db = mongoose.connection;
+
+db.once("connected", () => {
+  console.log("Database Connected");
+});
+
+db.on("error", (err) => {
+  console.log(err);
+});
+
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use("/images", imageRoutes);
+
+app.listen(3001, () => {
+  console.log("Server sudah berjalan di port 3001");
+});
+
+
+
+
+# 2️⃣ Frontend (React.js)
+ 📌 a. Komponen Upload Gambar (`frontend/src/components/ImageUpload.js`)  
+Komponen untuk upload dan menampilkan gambar.
+import React, { useEffect, useState } from 'react';
+import axios from 'axios';
+
+const TambahGambar = () => {
+  const [images, setImages] = useState([]);
+  const [file, setFile] = useState(null);
+
+  // Ambil gambar dari server
+  const getImages = () => {
+    axios
+      .get("http://localhost:3001/images")
+      .then((res) => {
+        setImages(res.data);
+      })
+      .catch((err) => {
+        console.error("Error fetching images:", err);
+      });
+  };
+
+  // Fungsi untuk meng-upload gambar
+  const handleUpload = async () => {
+    if (!file) {
+      console.log("No file selected.");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("gambar", file);  // "gambar" adalah fieldname yang digunakan di backend
+
+    try {
+      const response = await axios.post("http://localhost:3001/images", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",  // Penting untuk meng-upload file
+        },
+      });
+      // Setelah upload, ambil gambar lagi
+      getImages();
+    } catch (error) {
+      console.error("Error uploading image:", error);
+    }
+  };
+
+  // Ambil gambar dari server saat komponen pertama kali dimuat
+  useEffect(() => {
+    getImages();
+  }, []);
+
+  return (
+    <div>
+      <h2>Upload Gambar</h2>
+      <input
+        type="file"
+        onChange={(e) => setFile(e.target.files[0])}  // Menyimpan file yang dipilih
+      />
+      <button onClick={handleUpload}>Upload</button>
+
+      <h2>Daftar Gambar</h2>
+      <div>
+        {images.map((img) => (
+          <div key={img._id}>
+            <img src={img.url} alt={img.filename} width="100" />
+            <button onClick={() => handleDelete(img._id)}>Hapus</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default TambahGambar;
+
+
+
+ 📌 b. `App.js`  
+Tambahkan komponen ImageUpload ke dalam aplikasi.
+
+javascript
+import ImageUpload from "./components/ImageUpload";
+
+function App() {
+  return (
+    <div>
+      <h1>CRUD Gambar dengan MERN</h1>
+      <ImageUpload />
+    </div>
+  );
+}
+
+export default App;
+
+
+
+
+# 3️⃣ Cara Menjalankan
+ 📌 a. Backend
+1. Instal dependensi
+   sh
+   cd backend
+   npm install express mongoose multer cors dotenv
+   
+2. Buat file `.env`
+   
+   DATABASE_URL=mongodb://localhost:27017/gambarDB
+   
+3. Jalankan server
+   sh
+   node index.js
+   
+
+
+
+ 📌 b. Frontend
+1. Instal React
+   sh
+   cd frontend
+   npm install
+   
+2. Jalankan frontend
+   sh
+   npm start
+   
+
+
+========================================================================================================================
+
+1. Multer
+Multer adalah middleware untuk *Node.js* yang digunakan dalam Express.js untuk menangani file upload. Middleware ini berfungsi memproses data *multipart/form-data*, yang sering digunakan untuk mengunggah file melalui formulir HTML.
+
+
+
+ 1. Instalasi Multer
+Sebelum menggunakan *Multer*, kita harus menginstalnya terlebih dahulu:
+
+sh
+npm install multer
+
+
+
+
+ 2. Sintaks Wajib Multer
+Beberapa sintaks wajib saat menggunakan *Multer*:
+- `multer({ storage })` → untuk mengatur konfigurasi penyimpanan.
+- `diskStorage` → untuk menyimpan file ke disk lokal.
+- `memoryStorage` → untuk menyimpan file di memori (*buffer*).
+- `multer().single('fieldname')` → untuk menangani satu file.
+- `multer().array('fieldname', jumlah)` → untuk menangani banyak file.
+- `multer().fields([{ name: 'file1' }, { name: 'file2' }])` → untuk menangani banyak bidang upload.
+
+
+
+ 3. Cara Menggunakan Multer
+# a) Import dan Konfigurasi Multer
+js
+const express = require('express');
+const multer = require('multer');
+const path = require('path');
+
+const app = express();
+
+// Konfigurasi penyimpanan file
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, 'uploads/'); // Folder tempat menyimpan file
+    },
+    filename: function (req, file, cb) {
+        cb(null, file.fieldname + '-' + Date.now() + path.extname(file.originalname)); // Menyimpan file dengan nama unik
+    }
+});
+
+const upload = multer({ storage: storage });
+
+
+
+
+# b) Menangani Upload File
+ 1. Upload Satu File
+js
+app.post('/upload', upload.single('file'), (req, res) => {
+    res.send(`File ${req.file.filename} berhasil diunggah!`);
+});
+
+- `upload.single('file')`: Menangani satu file dengan `name="file"` di form HTML.
+
+ 2. Upload Banyak File
+js
+app.post('/upload-multiple', upload.array('files', 5), (req, res) => {
+    res.send(`${req.files.length} file berhasil diunggah!`);
+});
+
+- `upload.array('files', 5)`: Menangani hingga 5 file sekaligus.
+
+ 3. Upload File dengan Banyak Input
+js
+app.post('/upload-fields', upload.fields([{ name: 'image' }, { name: 'pdf' }]), (req, res) => {
+    res.send('File berhasil diunggah!');
+});
+
+- `upload.fields([...])`: Untuk menangani banyak input *file* dalam satu request.
+
+
+
+ 4. Contoh Form HTML untuk Upload File
+html
+<form action="/upload" method="POST" enctype="multipart/form-data">
+    <input type="file" name="file">
+    <button type="submit">Upload</button>
+</form>
+
+- Gunakan `enctype="multipart/form-data"` agar formulir bisa mengunggah file.
+
+
+
+ 5. Kesimpulan
+- Multer digunakan dalam Express.js untuk menangani file upload.
+- Bisa menyimpan file di disk lokal atau buffer memori.
+- Mendukung single file upload, multiple file upload, dan multi-field file upload.
+- Pastikan direktori penyimpanan sudah tersedia (`uploads/`), atau file tidak akan tersimpan.
+
+
+
+PENJELASAN LANJUT 
+
+Berikut adalah contoh kode *Multer* dengan komentar pada setiap barisnya untuk menjelaskan fungsinya secara lebih detail:  
+
+js
+const express = require('express'); // Import framework Express.js
+const multer = require('multer'); // Import Multer untuk menangani upload file
+const path = require('path'); // Import modul path untuk menangani ekstensi file
+
+const app = express(); // Inisialisasi aplikasi Express.js
+
+// Konfigurasi penyimpanan file dengan diskStorage
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) { 
+        // Menentukan folder tempat menyimpan file yang diunggah
+        cb(null, 'uploads/'); // File akan disimpan dalam folder "uploads"
+    },
+    filename: function (req, file, cb) {
+        // Menentukan nama file yang akan disimpan di server
+        cb(null, file.fieldname + '-' + Date.now() + path.extname(file.originalname)); 
+        // Nama file = nama field + timestamp + ekstensi asli
+    }
+});
+
+// Inisialisasi multer dengan konfigurasi penyimpanan di atas
+const upload = multer({ storage: storage });
+
+// Endpoint untuk menangani upload satu file
+app.post('/upload', upload.single('file'), (req, res) => {
+    // upload.single('file') → hanya menerima satu file dengan fieldname "file"
+    res.send(`File ${req.file.filename} berhasil diunggah!`); // Mengirim respons ke klien
+});
+
+// Endpoint untuk menangani upload banyak file dalam satu field
+app.post('/upload-multiple', upload.array('files', 5), (req, res) => {
+    // upload.array('files', 5) → menerima hingga 5 file dengan fieldname "files"
+    res.send(`${req.files.length} file berhasil diunggah!`); // Mengirim respons ke klien
+});
+
+// Endpoint untuk menangani upload file dengan beberapa field berbeda
+app.post('/upload-fields', upload.fields([{ name: 'image' }, { name: 'pdf' }]), (req, res) => {
+    // upload.fields([{ name: 'image' }, { name: 'pdf' }]) → menerima file pada field "image" dan "pdf"
+    res.send('File berhasil diunggah!'); // Mengirim respons ke klien
+});
+
+// Menjalankan server pada port 3000
+app.listen(3000, () => {
+    console.log('Server berjalan di http://localhost:3000'); // Menampilkan pesan bahwa server sudah berjalan
+});
+
+
+ Penjelasan Per Baris
+1. Mengimpor modul yang dibutuhkan:
+   - `express` untuk membuat server.
+   - `multer` untuk menangani file upload.
+   - `path` untuk mendapatkan ekstensi file.
+
+2. Konfigurasi penyimpanan file (`multer.diskStorage`):
+   - `destination` → Menentukan folder tempat menyimpan file.
+   - `filename` → Menentukan nama file yang akan disimpan.
+
+3. Inisialisasi `multer` dengan konfigurasi storage:
+   - Digunakan untuk menangani file sebelum disimpan.
+
+4. Menangani berbagai jenis upload:
+   - `upload.single('file')` → Untuk menangani satu file.
+   - `upload.array('files', 5)` → Untuk menangani banyak file (max 5) dalam satu field.
+   - `upload.fields([{ name: 'image' }, { name: 'pdf' }])` → Untuk menangani file dari beberapa field.
+
+5. Menjalankan server:
+   - Mendengarkan request pada port 3000.
+
+Dengan komentar ini, setiap bagian kode lebih mudah dipahami! 🚀 Ada bagian yang masih kurang jelas?
+
+
+
+
+===========================================================
+
+
+Contoh Lengkap : 
+BACKEND : 
+
+Schema : 
+const mongoose = require("mongoose")
+
+const gambarSchema =  new mongoose.Schema({
+    filename : {
+        type : String,
+        required : true
+    },
+    url : {
+        type : String,
+        required: true
+    },
+  },
+    {
+        timestamps : true
+    }
+)
+
+module.exports = mongoose.model("Gambar",gambarSchema)
+
+
+
+
+
+Controller : 
+const express= require("express")
+const multer = require("multer")
+const GambarSchema = require("../Schema/GambarSchema")
+const fs = require("fs")
+const path = require("path")
+const rute = express.Router();
+
+
+const storage = multer.diskStorage({
+    destination : "uploads/",
+    filename : (req,file,cb) => cb(null, Date.now() + "-" + file.originalname)
+})
+const upload = multer({storage})
+
+
+// Ambil semua gambar
+rute.get("/", async(req,res) => {
+    try{
+        const images = await GambarSchema.find();
+        res.status(200).json(images)
+    }catch(err){
+        res.status(500).json({err})
+    }
+})
+
+//Upload Gambar
+rute.post("/", upload.single("gambar"), async(req,res) => {
+    if(!req.file) {
+        return res.status(400).json({message : "Tidak ada data yang diupload"})
+    }
+
+    try{
+        const newImage = await GambarSchema.create({
+            filename : req.file.filename,
+            url : `http://localhost:3001/uploads/${req.file.filename}`
+        })
+        res.status(201).json(newImage)
+    }catch(err){
+        res.status(500).json(err)
+    }
+})
+
+// Hapus Gambar
+rute.delete("/:id", async(req,res) => {
+    try{
+        const image = await GambarSchema.findById(req.params.id)
+        if(!image) return res.status(404).json({message : "Gambar tidak ditemukan"})
+        
+        // Hapus File dari folder uploads
+        const filePath = path.join(__dirname, "../uploads", image.filename)
+        fs.unlinkSync(filePath)
+
+        // Hapus dari databse
+        await GambarSchema.deleteOne({_id : req.params.id})
+        res.json({message : "Gambar terhapus"})
+
+    }catch(err){
+        res.status(500).json(err)
+    }
+})
+
+module.exports = rute
+
+
+
+
+
+
+Index : 
+require("dotenv").config();
+const express = require("express");
+const mongoose = require("mongoose")
+const mongoString = process.env.DATABASE_URL
+const app = express();
+const cors = require("cors")
+app.use(express.json())
+app.use(express.urlencoded({extended:true}))
+app.use(cors())
+const TodolistRouting = require("./Controller/TodolistRouting")
+const GambarRouting = require("./Controller/GambarRouting")
+
+const path = require("path")
+
+mongoose.connect(mongoString);
+const db = mongoose.connection;
+
+db.once("connnected",() => {
+    console.log("Database Connected");
+})
+
+db.on("error",(err) => {
+    console.log(err)
+})
+
+app.use("/todo", TodolistRouting);
+app.use("/uploads", express.static(path.join(__dirname,"uploads")))
+app.use("/images",GambarRouting)
+
+app.listen(3001,() => {
+    console.log("Server sudah berjalan")
+})
+
+
+
+
+
+
+
+Frontend : 
+import React, { useEffect, useState } from 'react'
+import Content from './Content'
+import AddItem from './AddItem'
+import gambar1 from "../../Assets/Login.png"
+import gambar2 from  "../../Assets/Login1.png"
+import axios from "axios"
+
+const TambahGambar = () => {
+    const [images,setImages] = useState([])
+    const [file,setFile] = useState(null)
+
+    const getImages = () => {
+        axios.get("http://localhost:3001/images")
+        .then(res => {
+            setImages(res.data)
+        })
+    }
+
+    // Upload
+    const uploadImage = async() => {
+        if(!file) {
+            console.log("Tidak ada file yang dipilih")
+            return ;
+        }
+
+        const formData = new FormData();
+        formData.append("gambar",file)
+
+        try{
+            // Mengirim file ke server
+            await axios.post("http://localhost:3001/images", formData, {
+                headers : {
+                    "Content-Type" : "multipart/form-data"
+                }
+             })
+            getImages();
+        }catch(err){
+            console.error("Error pada gambar : " +err)
+        }
+    }
+
+    // Ambil gambar dari Server
+    useEffect(() => {
+        getImages()
+    },[])
+
+    return (
+        <div>
+            {/* <AddItem/> */}
+            <input type="file"
+            onChange={(e) => setFile(e.target.files[0])}
+            />
+            <button onClick={uploadImage}>Upload Gambar</button>
+
+            {gambar.map((item,index) => (
+                <div key={index}>
+                    <Content id={item.id} url={item.url} judul={item.judul} isi={item.isi}  />
+                </div>
+            ))}
+           {/* <Content /> */}
+        </div>
+  )
+}
+
+export default TambahGambar
